@@ -141,7 +141,17 @@ use crutool.ini in your home directory.
     review=This is the template for displaying reviews
     pullrequest=This is the email template for pull requests
 
+Installation
+============
+
+crutool uses the standard setuptools shim, so all you have to do is clone the repository and type:
+    
+    sudo python setup.py install
+
+afterwards, the crutool command will be available in your path.
+
 License
 =======
+
 This work is distributed under the terms of the [Mozilla Public
 License](http://www.mozilla.org/MPL/2.0/), because that is what I am used to.
