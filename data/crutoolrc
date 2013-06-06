@@ -1,0 +1,44 @@
+[templates]
+issue=    \033[1mSummary\033[0m: {summary[value]}
+          \033[1mURL\033[0m: {htmlURL}
+     \033[1mAssigned\033[0m: {assignee[value][displayName]}
+    \033[1mComponent\033[0m: {components[value][0][name]}
+       \033[1mStatus\033[0m: {status[value][name]}
+
+  \033[1mDescription\033[0m:
+  {description[value]}
+review=   \033[1mSummary\033[0m: {name}
+         \033[1mURL\033[0m: {htmlURL}
+      \033[1mAuthor\033[0m: {author[displayName]}
+         \033[1mDue\033[0m: {fmt_dueDate_color}
+      \033[1mStatus\033[0m: {state}
+   \033[1mReviewers\033[0m:
+      {fmt_reviewers_completed_color}
+      {fmt_reviewers_uncompleted_color}
+
+  \033[1mObjectives\033[0m:
+  {description}
+
+  \033[1mGeneral Comments\033[0m:
+  {fmt_general_comments}
+
+  \033[1mSource Comments\033[0m:
+  {fmt_versioned_comments}
+
+pullrequest=From: {from}
+  To: {to}
+  Subject: [PULL REQUEST] {issue}
+
+  Hello,
+
+  Branch: {repo}/{branch}
+
+  Revision:
+  {revisions}
+
+  Target: {target}
+
+  Issue URL: {JIRA_BASE}/browse/{issue}
+
+  Thanks,
+  {from}
