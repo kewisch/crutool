@@ -53,6 +53,7 @@ class CRUApi(Resource):
     user = os.getenv("CRU_USER") or getpass.getuser()
     dueDate = utils.isonow(datetime.timedelta(3))
     createDate = utils.isonow()
+    revisions = []
 
     for cset in csets:
       ci = self.commitInfo(repo, cset)
