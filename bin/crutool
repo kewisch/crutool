@@ -1,0 +1,402 @@
+#!/usr/bin/env python
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+# Portions Copyright (C) Philipp Kewisch, 2013
+
+import re
+import sys
+import getpass
+import smtplib
+import os
+
+from crutool.displayer import JSONDisplayer
+from crutool.exceptions import *
+from crutool.utils import *
+from crutool.config import config
+
+from crutool.cru import CRUApi
+from crutool.jira import JIRAApi
+
+try:
+  import git
+  gitSupport = True
+except:
+  gitSupport = False
+
+try:
+  import keyring
+except:
+  import crutool.fakekeyring as keyring 
+
+if config.get("defaults", "debug", False):
+  import httplib2
+  httplib2.debuglevel = 9
+
+CRU_REST="/rest-service"
+JIRA_REST="/rest/api/latest"
+
+class CRUTool(object):
+  CRU_REVIEW_SET_ALLOWED =  ["summarize", "close", "reopen", "complete", \
+                             "uncomplete", "abandon", "delete"]
+  ISSUE_RE = re.compile(r"[A-Z]+-\d+")
+
+  # crucible commands
+
+  def cru_review(self, args):
+    """Usage: crutool review <issue_or_cr> <set|show|pr> <args>
+       Usage: crutool review create <args>"""
+    if len(args) < 1:
+      raise UsageException(self.cru_review, "Missing issue/review id")
+
+
+    # special case :-(
+    if args[0] == "create":
+      return self.cru_review_create(args[1:])
+
+    cr = args[0]
+    if cr == "_":
+      issue = config.get("cache", "lastissue")
+      if issue is None:
+        raise UsageException(self.cru_review, "No last issue set")
+      cr = self.cru.reviewForIssue(issue)
+      print "Using %s for issue %s" % (cr, issue)
+    elif CRUTool.ISSUE_RE.match(cr) and cr[:2] != "CR":
+      # TODO possibly CR is configurable...
+      issue = cr
+      cr = self.cru.reviewForIssue(cr)
+      print "Using %s for issue %s" % (cr, issue)
+      config.set("cache", "lastissue", issue)
+    elif cr[:2] != "CR":
+      raise UsageException(self.cru_review, "Unknown review %s" % cr)
+
+    func = {
+      'show': self.cru_review_show,
+      'set': self.cru_review_set,
+      'pr': self.cru_pullrequest,
+    }.get(args[1] if len(args) > 1 else "", self.cru_review_show)
+
+    func(cr, args[2:])
+
+  def cru_review_create(self, args):
+    """User supplies all parameters:
+         crutool review create <project> <issue> <repo> <cset> [cset2...]
+
+       In a directory with a git repository:
+         crutool review create <project> <target>
+
+       Additionally, with the default project set in the config
+         crutool review create <target>"""
+
+    arglen = len(args)
+
+    # One or two arguments: use git to fill in the details
+    if arglen == 0 or arglen == 3:
+      # There is no other call 0 or 3 arguments, everything else is ok
+      raise UsageException(self.cru_review_create, "Missing arguments")
+    if arglen < 3:
+      if not gitSupport: raise UsageException(self.cru_review_gitcreate, "Please install GitPython")
+      root = gitroot(os.getcwd())
+      if not root: raise UsageException(self.cru_review_gitcreate, "No git repository found")
+      repo = os.path.basename(root)
+      gitrepo = git.Repo(root)
+
+      if arglen == 1:
+        project = config.require("defaults", "project")
+        target = args[0]
+      elif arglen == 2:
+        project, target = args[:2]
+        
+      csets = []
+      for cherry in gitrepo.git.cherry(target).split("\n"):
+        addremove, cset = cherry.split(" ")
+        if addremove == "+":
+          csets.append(cset)
+
+      if len(csets) == 0:
+        raise UsageException(self.cru_review_gitcreate,
+                             "No changes against %s" % target)
+      cset0 = csets[0]
+      name = gitrepo.commit(cset0).message
+      issue = CRUTool.ISSUE_RE.search(name)
+      if issue is None: raise UsageException(self.cru_review_gitcreate, "Commit message does not contain issue id (%s)" % csets[0].message)
+      issue = issue.group(0)
+    
+      if len(csets) < 5:
+        csetmsg = "changesets: %s" % ", ".join(csets)
+      else:
+        csetmsg = "%d changesets" % len(csets)
+
+      print "Creating %s review for %s in %s with %s" % (project, issue, repo, csetmsg)
+    else:
+      # User provides all details
+      project = args[0]
+      issue = args[1]
+      repo = args[2]
+      csets = args[3:]
+
+      issueInfo = self.jira.issueInfo(issue)
+      name = "%s - %s" % (issue, issueInfo["fields"]["summary"]["value"])
+
+    # Finally, create the review
+    review = self.cru.createReview(project, issue, repo, name, csets)
+
+    if review and "permaId" in review and "id" in review["permaId"]:
+      cr = review["permaId"]["id"]
+      htmlLink = "%s/cru/%s" % (config.require("defaults", "cru_base"), cr)
+      print "Created review for %s at %s" % (issue, htmlLink)
+    else:
+      print "An error occurred:",review
+
+  def cru_review_show(self, cr, args):
+    """Usage: crutool review <issue_or_cr> show"""
+    review = self.cru.reviewInfo(cr, True)
+    htmlLink =  "%s/cru/%s" % (config.require("defaults", "cru_base"), cr)
+    JSONDisplayer.cruReview(review, htmlLink)
+
+  def cru_review_set(self, cr, args):
+    """Usage: crutool review <issue_or_cr> set <status>""" 
+    if len(args) < 1:
+      raise UsageException(self.cru_review_set, "Missing status value")
+
+    action = args[0]
+    if action not in CRUTool.CRU_REVIEW_SET_ALLOWED:
+      raise UsageException(self.cru_review_set,
+                           "Invalid status value (expected: %s)" % \
+                             (",".join(CRUTool.CRU_REVIEW_SET_ALLOWED)))
+
+    transitions = map(lambda x: x["displayName"].lower(),
+                      self.cru.getTransitions(cr)["transitionData"])
+    if action in transitions:
+      self.cru.setReviewStatus(cr, action)
+    elif action == "close" and "summarize" in transitions:
+      self.cru.setReviewStatus(cr, "summarize")
+      self.cru.setReviewStatus(cr, action)
+    else:
+      raise UsageException(self.cru_review_set,
+                           "Invalid transition (expected: %s)" % \
+                             (",".join(transitions)))
+    print "Status %s set successfully" % action
+  
+  def cru_pullrequest(self, cr, args):
+    """Usage: crutool review <issue_or_cr> pr <targetbranch> [branch]
+       If <branch> is not specified, the issue name will be used.
+       If git support is available and you are in your repository,
+       the branch and changesets will be taken from the repository """
+    if len(args) < 1: raise UsageException(self.cru_pullrequest, "Missing target")
+
+    review = self.cru.reviewInfo(cr, True)
+    if review["state"] != "Closed":
+      raise UsageException(self.cru_pullrequest,
+        "Review is %s but should be Closed" % review["state"])
+
+    issue = None
+    repo = None
+    revisions = []
+    target = args[0]
+    if gitSupport:
+      root = gitroot(os.getcwd())
+      gitrepo = git.Repo(root)
+      repo = os.path.basename(root)
+      branch = gitrepo.active_branch if len(args) < 2 else args[1]
+
+      rev0 = None
+      for cherry in gitrepo.git.cherry(target).split("\n"):
+        addremove, cset = cherry.split(" ")
+        if addremove == "+":
+          if rev0 is None:
+            rev0 = cset
+
+          message = gitrepo.commit(cset).message.split("\n", 1)[0].strip()
+          revisions.append("%s - %s" % (cset, message))
+
+      if len(revisions) == 0:
+        raise UsageException(self.cru_review_gitcreate,
+                             "No changes against %s" % target)
+      issueMatch = CRUTool.ISSUE_RE.search(gitrepo.commit(rev0).message)
+    
+    else:
+      issueMatch = CRUTool.ISSUE_RE.search(review["name"])
+      repo = review["reviewItems"]["reviewItem"][0]["repositoryName"]
+      branch = issueMatch.group(0) if issueMatch and len(args) < 2 else args[1]
+
+      for r in review["reviewItems"]["reviewItem"]:
+        ci = self.cru.commitInfo(repo, r["toRevision"])
+        comment = ci["comment"] if ci else review["name"]
+        revisions.append("%s - %s" % (r["toRevision"], ci["comment"]))
+
+    if not issueMatch:
+      # Hmm too bad, the current structure wouldn't allow re-using the
+      # user-entered issue id. Maybe this forces people to reference the
+      # issue.
+      raise Exception("Could not deduce issue from review. " +
+                      "Use issue id in your commit message")
+    issue = issueMatch.group(0)
+
+    data = {
+      'from': config.require("smtp", "from"),
+      'to': config.require("smtp", "recipients"),
+      'issue': issue,
+      'repo': repo,
+      'branch': issue if len(args) < 2 else args[1],
+      'revisions': "\n".join(revisions),
+      'target': target,
+      'JIRA_BASE': config.require("defaults", "jira_base")
+    }
+    msg = JSONDisplayer.pullRequest(data)
+    print "=== BEGIN MESSAGE ==="
+    print msg
+    print "=== END MESSAGE ==="
+    raw_input("Ok? (Ctrl+C to cancel) ")
+
+    host = config.require("smtp", "host")
+    if config.get("smtp", "ssl") == "True":
+      smtp = smtplib.SMTP_SSL(host)
+    else:
+      smtp = smtplib.SMTP(host)
+
+    user = config.require("smtp", "username")
+    password = keyring.get_password('crutool-smtp', user)
+    if password is None:
+      password = getpass.getpass("SMTP Password:")
+      keyring.set_password('crutool-smtp', user, password)
+
+    smtp.login(user, password)
+    smtp.sendmail(config.require("smtp", "from"),
+                  config.require("smtp", "recipients"), msg)
+    smtp.quit()
+    print "Success"
+
+
+  # jira commands
+  def jira_main(self, args):
+    """Usage: crutool jira <issue> <show|transitions|set> <args>"""
+    if len(args) < 1: raise UsageException(self.jira_main)
+
+    issue = args[0]
+    if issue == "create":
+      return self.jira_create(args)
+    elif issue == "_":
+      issue = config.get("cache", "lastissue")
+      if issue is None:
+        raise UsageException(self.jira_main, "No last issue set")
+    else:
+      config.set("cache", "lastissue", issue)
+
+    func = {
+      'show': self.jira_show,
+      'transitions': self.jira_transitions,
+      'set': self.jira_set,
+    }.get(args[1] if len(args) > 1 else "", self.jira_show)
+
+    return func(issue, args[2:])
+
+  def jira_create(self, args):
+    # Put this here for the future, and in case someone assumes it exists
+    print "Sorry, the version this tool is designed for (Jira 4.x) is " + \
+          "not capable of creating issues via API"
+
+  def jira_transitions(self, issue, args):
+    """Usage: crutool jira <issue> transitions"""
+    JSONDisplayer.jiraTransitions(self.jira.getTransitions(issue))
+
+  def jira_set(self, issue, args):
+    """Usage: crutool jira <issue> set"""
+    transitions = self.jira.getTransitions(issue)
+    opts,prompt = textOptions({ k: v["name"] for k,v in transitions.iteritems() })
+    ch = raw_input(prompt + " ? ")
+    transId = opts[ch.lower()]
+
+    fields = None
+    if len(transitions[transId]["fields"]):
+      fields = {}
+      for field in transitions[transId]["fields"]:
+        req = " (optional)" if not field["required"] else " (required)"
+        val = raw_input(field["id"] + req + ": ")
+        if field["required"] or len(val):
+          fields[field["id"]] = val
+
+    self.jira.transitionIssue(issue, int(transId), fields=fields)
+
+  def jira_show(self, issue, args):
+    info = self.jira.issueInfo(issue)
+    htmlLink =  "%s/browse/%s" % (config.get("defaults", "jira_base"), issue)
+    JSONDisplayer.issue(info, htmlLink)
+
+  # auth commands
+  
+  def auth_clear(self, args):
+    user = os.getenv("CRU_USER") or getpass.getuser()
+    keyring.delete_password('crutool', user)
+    print "Authentication cleared"
+
+  # api methods
+  def api_call(self, args):
+    """Usage: crutool api <jira|cru> <http_method> <url> [header=value...]"""
+    if len(args) < 3: raise UsageException(self.api_call, "Missing arguments")
+    api, method, uri = args[:3]
+    params = {}
+
+    for arg in args[3:]:
+      if "=" in arg:
+        k,v = arg.split("=")
+        params[k] = v
+
+    api = getattr(self, api)
+    method = getattr(api, method)
+
+    print json_pp(method(uri, params=params))
+
+  # last issue
+  def lastissue(self, args):
+    print config.get("cache", "lastissue", "")
+
+  # main method
+
+  def main(self, args):
+    """Usage: crutool <jira|review|authclear|api|_> <args>"""
+
+    def defaultAction(args):
+      raise UsageException(self.main)
+
+    func = {
+      'review': self.cru_review,
+      'jira': self.jira_main,
+      'authclear': self.auth_clear,
+      'api': self.api_call,
+      '_': self.lastissue,
+    }.get(args[1] if len(args) > 1 else "", defaultAction)
+
+    user = os.getenv("CRU_USER") or getpass.getuser()
+    password = keyring.get_password('crutool', user)
+
+    try:
+      if password is None:
+        password = getpass.getpass("%s's Password:" % user)
+        keyring.set_password('crutool', user, password)
+
+      cruBase = config.require("defaults", "cru_base")
+      jiraBase = config.require("defaults", "jira_base")
+      self.cru = CRUApi(cruBase + CRU_REST, user, password)
+      self.jira = JIRAApi(jiraBase + JIRA_REST, user, password)
+
+      func(args[2:])
+      pw_succeeded = True
+    except LoginFailedException as e:
+      keyring.delete_password('crutool', user)
+      if e.reason == "AUTHENTICATION_DENIED":
+        print "Login failed too many times. Please log in once via " + \
+              "the web interface and try again"
+      else:
+        print "Login Failed (%s)" % e.reason
+        self.main(args)
+    except UsageException as e:
+      print e
+    except KeyboardInterrupt:
+      pass
+
+    # Save the config file in case something changed
+    config.saveUserFile()
+
+if __name__ == '__main__':
+  CRUTool().main(sys.argv)
