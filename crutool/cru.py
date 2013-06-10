@@ -81,8 +81,5 @@ class CRUApi(Resource):
       }
     }
 
-    print obj
-
     return self.post("/reviews-v1", body=obj)
-    print obj
 
