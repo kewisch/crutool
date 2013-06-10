@@ -74,9 +74,53 @@ class CRUTool(object):
       'show': self.cru_review_show,
       'set': self.cru_review_set,
       'pr': self.cru_pullrequest,
+      'add': self.cru_add_changeset,
     }.get(args[1] if len(args) > 1 else "", self.cru_review_show)
 
     func(cr, args[2:])
+
+  def cru_add_changeset(self, cr, args):
+    """Add specific changesets
+         crutool review <issue_or_cr> add <repo> <changeset> [changeset2...]
+
+       In a directory with a git repository:
+         crutool review <issue_or_cr> add <target>"""
+
+    csets = args
+    if gitSupport and len(args) == 1:
+      root = gitroot(os.getcwd())
+      repo = os.path.basename(root)
+      gitrepo = git.Repo(root)
+      target = args[0]
+
+      if target in gitrepo.heads:
+        print "has head",gitrepo.heads[target].commit
+        # There is a such head, its not a changeset. Compare to it
+        csets = []
+        for cherry in gitrepo.git.cherry(target).split("\n"):
+          addremove, cset = cherry.split(" ")
+          if addremove == "+":
+            csets.append(cset)
+      else:
+        raise UsageException(self.cru_add_changeset, "Invalid target repository")
+
+    else:
+      if len(args) < 1:
+        raise UsageException(self.cru_add_changeset, "Missing repository or target")
+      elif len(args) < 2:
+        raise UsageException(self.cru_add_changeset, "Missing changesets")
+
+      repo = args[0]
+      csets = args[1:]
+
+    print "Adding %d changesets to %s" % (len(csets), cr)
+
+    res = self.cru.addChangeset(cr, repo, csets)
+    if "name" in res:
+      print "Success"
+    else:
+      print "An Error occurred",res
+
 
   def cru_review_create(self, args):
     """User supplies all parameters:

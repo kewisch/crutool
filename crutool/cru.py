@@ -83,3 +83,12 @@ class CRUApi(Resource):
 
     return self.post("/reviews-v1", body=obj)
 
+  def addChangeset(self, cr, repo, csets):
+    obj = {
+      "repository": repo,
+      "changesets": {
+        "changesetData": [ { "id": c } for c in csets ]
+      }
+    }
+
+    return self.post("/reviews-v1/%s/addChangeset" % cr,body=obj)
