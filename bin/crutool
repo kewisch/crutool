@@ -139,9 +139,9 @@ class CRUTool(object):
       # There is no other call 0 or 3 arguments, everything else is ok
       raise UsageException(self.cru_review_create, "Missing arguments")
     if arglen < 3:
-      if not gitSupport: raise UsageException(self.cru_review_gitcreate, "Please install GitPython")
+      if not gitSupport: raise UsageException(self.cru_review_create, "Please install GitPython")
       root = gitroot(os.getcwd())
-      if not root: raise UsageException(self.cru_review_gitcreate, "No git repository found")
+      if not root: raise UsageException(self.cru_review_create, "No git repository found")
       repo = os.path.basename(root)
       gitrepo = git.Repo(root)
 
@@ -158,12 +158,12 @@ class CRUTool(object):
           csets.append(cset)
 
       if len(csets) == 0:
-        raise UsageException(self.cru_review_gitcreate,
+        raise UsageException(self.cru_review_create,
                              "No changes against %s" % target)
       cset0 = csets[0]
       name = gitrepo.commit(cset0).message
       issue = CRUTool.ISSUE_RE.search(name)
-      if issue is None: raise UsageException(self.cru_review_gitcreate, "Commit message does not contain issue id (%s)" % csets[0].message)
+      if issue is None: raise UsageException(self.cru_review_create, "Commit message does not contain issue id (%s)" % csets[0].message)
       issue = issue.group(0)
     
       if len(csets) < 5:
@@ -255,7 +255,7 @@ class CRUTool(object):
           revisions.append("%s - %s" % (cset, message))
 
       if len(revisions) == 0:
-        raise UsageException(self.cru_review_gitcreate,
+        raise UsageException(self.cru_pullrequest,
                              "No changes against %s" % target)
       issueMatch = CRUTool.ISSUE_RE.search(gitrepo.commit(rev0).message)
     
