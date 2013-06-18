@@ -394,7 +394,7 @@ class CRUTool(object):
 
     for arg in args[3:]:
       if "=" in arg:
-        k,v = arg.split("=")
+        k,v = arg.split("=", 1)
         params[k] = v
 
     api = getattr(self, api)
