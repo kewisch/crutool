@@ -36,3 +36,13 @@ class JIRAApi(Resource):
 
   def issueInfo(self, issue):
     return self.get("/issue/%s" % issue);
+
+  def dashboard(self, expandAll=False):
+    params = { "jql": "assignee=%s and status=open order by priority" % self.username }
+    issues = self.get("/search", params=params)
+    for i in range(0, len(issues["issues"])):
+      issue = issues["issues"][i]
+      issues["issues"][i] = self.issueInfo(issues["issues"][i]["key"])
+      if not expandAll: break
+
+    return issues

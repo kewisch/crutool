@@ -66,6 +66,10 @@ Jira Module
     # state.
     crutool jira <issue> set
 
+    # Show bugs assigned to you and open, by priority. Adding "all" shows all
+    # summaries, but is slower. Without "all", only first summary is shown.
+    crutool jira todo [all]
+
 Other Commands
 --------------
 

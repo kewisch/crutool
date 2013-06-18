@@ -31,6 +31,21 @@ class JSONDisplayer(object):
       print "%s (%s)" % (trans["name"], ",".join(fields))
 
   @staticmethod
+  def jiraDashboard(obj):
+    # print json_pp(obj)
+    for issue in obj["issues"]:
+      if "fields" in issue and "summary" in issue["fields"]:
+        print "%s - %s" % (issue["key"], issue["fields"]["summary"]["value"])
+      else:
+        print "%s" % issue["key"]
+
+    total = int(obj["total"])
+    maxres = int(obj["maxResults"])
+    if total > maxres:
+      print "... (%d more)" % (total - maxres)
+
+
+  @staticmethod
   def cruReview(obj, htmlLink=None):
     obj["htmlURL"] = htmlLink
 

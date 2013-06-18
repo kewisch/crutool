@@ -322,7 +322,9 @@ class CRUTool(object):
 
     issue = args[0]
     if issue == "create":
-      return self.jira_create(args)
+      return self.jira_create(args[1:])
+    elif issue == "todo":
+      return self.jira_todo(args[1:])
     elif issue == "_":
       issue = config.get("cache", "lastissue")
       if issue is None:
@@ -338,6 +340,11 @@ class CRUTool(object):
     }.get(args[1] if len(args) > 1 else "", self.jira_show)
 
     return func(issue, args[2:])
+
+  def jira_todo(self, args):
+    """Usage: crutool jira todo [all]"""
+    expandAll = (len(args) and args[0] == "all")
+    JSONDisplayer.jiraDashboard(self.jira.dashboard(expandAll))
 
   def jira_create(self, args):
     # Put this here for the future, and in case someone assumes it exists
