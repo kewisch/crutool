@@ -49,9 +49,11 @@ def isonow(delta=None):
 
 
 def gitroot(path):
-  while not os.path.exists(".git") and not path == "/":
+  while not path == "/":
+    if os.path.exists(os.path.join(path, ".git")):
+      return path
     path = os.path.dirname(path)
-  return path if os.path.exists(".git") else None
+  return None
 
 def docstring_trim(docstring):
     if not docstring:
