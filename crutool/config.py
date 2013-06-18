@@ -57,7 +57,7 @@ class CRUToolConfig(object):
     return self.get(section, key, exception=True)
 
   def format(self, section, key, data):
-    return self.get(section, key, "").format(**data)
+    return self.get(section, key, "").decode('utf-8').format(**data)
 
 # our global instance
 config = CRUToolConfig()
