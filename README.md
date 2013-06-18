@@ -141,6 +141,21 @@ use crutool.ini in your home directory.
     review=This is the template for displaying reviews
     pullrequest=This is the email template for pull requests
 
+
+git integration
+---------------
+
+If you use git alot, you might find yourself typing "git jira" even though you meant "crutool jira". Its easy to integrate crutool with git using aliases. Put this in your ~/.gitconfig:
+
+    [alias]
+    jira = !crutool jira
+    review = !crutool review
+
+Then you can use git like this:
+
+    git jira CTL-1234 show
+    git review create CR next
+
 Installation
 ============
 
