@@ -189,6 +189,9 @@ class CRUTool(object):
       cr = review["permaId"]["id"]
       htmlLink = "%s/cru/%s" % (config.require("defaults", "cru_base"), cr)
       print "Created review for %s at %s" % (issue, htmlLink)
+
+      # Set the last issue to this issue for further processing
+      config.set("cache", "lastissue", issue)
     else:
       print "An error occurred:",review
 
@@ -324,6 +327,7 @@ class CRUTool(object):
       issue = config.get("cache", "lastissue")
       if issue is None:
         raise UsageException(self.jira_main, "No last issue set")
+      print "Using last issue %s" % issue
     else:
       config.set("cache", "lastissue", issue)
 
