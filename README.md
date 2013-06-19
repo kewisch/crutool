@@ -129,6 +129,7 @@ use crutool.ini in your home directory.
     jira_base=https://localhost/jira            # Path to where your jira instance resides
     cru_user=john@example.com                   # Fisheye/Crucible login
     jira_user=johndoe                           # JIRA login
+    ssl_no_verify=False                         # Do not verify SSL certificates (True|False, defaults to False)
 
     [smtp]
     smtp.from=John Doe <john@example.com>       # Email sender

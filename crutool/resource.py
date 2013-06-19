@@ -11,12 +11,14 @@ import base64
 import urllib
 import json
 import os
+from .config import config
 
 class Resource(object):
   def __init__(self, username, password, ca_certs=None):
     self.username = username
     self.password = password
     self.ca_certs = ca_certs
+    self.ssl_no_verify = config.get('defaults', 'ssl_no_verify', 'false') in ['true', '1', 't', 'True', 'TRUE']
 
   def _prepare(self, uri, kwargs):
     r = urlparse(uri)
@@ -30,7 +32,7 @@ class Resource(object):
       r = urlparse(proxyUri)
       proxyInfo = httplib2.ProxyInfo(socks.PROXY_TYPE_HTTP, r.hostname, r.port or 3128)
 
-    http = httplib2.Http(ca_certs=self.ca_certs, proxy_info=proxyInfo)
+    http = httplib2.Http(ca_certs=self.ca_certs, proxy_info=proxyInfo, disable_ssl_certificate_validation=self.ssl_no_verify)
 
     if not 'headers' in kwargs:
       kwargs['headers'] = {}
