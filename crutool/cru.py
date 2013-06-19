@@ -50,7 +50,7 @@ class CRUApi(Resource):
       return None
 
   def createReview(self, project, issue, repo, name, csets):
-    user = os.getenv("CRU_USER") or getpass.getuser()
+    user = os.getenv("CRU_USER") or config.get('defaults', 'cru_user', getpass.getuser())
     dueDate = utils.isonow(datetime.timedelta(3))
     createDate = utils.isonow()
     revisions = []

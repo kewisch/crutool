@@ -422,23 +422,29 @@ class CRUTool(object):
       '_': self.lastissue,
     }.get(args[1] if len(args) > 1 else "", defaultAction)
 
-    user = os.getenv("CRU_USER") or getpass.getuser()
-    password = keyring.get_password('crutool', user)
+    cru_user = os.getenv("CRU_USER") or config.get('defaults', 'cru_user', getpass.getuser())
+    cru_password = keyring.get_password('crutool', cru_user)
+    jira_user = os.getenv("JIRA_USER") or config.get('defaults', 'jira_user', getpass.getuser())
+    jira_password = keyring.get_password('crutool', jira_user)
 
     try:
-      if password is None:
-        password = getpass.getpass("%s's Password:" % user)
-        keyring.set_password('crutool', user, password)
+      if jira_password is None:
+        jira_password = getpass.getpass("%s's Password:" % jira_user)
+        keyring.set_password('crutool', jira_user, jira_password)
+      if cru_password is None:
+        cru_password = getpass.getpass("%s's Password:" % cru_user)
+        keyring.set_password('crutool', cru_user, cru_password)
 
       cruBase = config.require("defaults", "cru_base")
       jiraBase = config.require("defaults", "jira_base")
-      self.cru = CRUApi(cruBase + CRU_REST, user, password)
-      self.jira = JIRAApi(jiraBase + JIRA_REST, user, password)
+      self.cru = CRUApi(cruBase + CRU_REST, cru_user, cru_password)
+      self.jira = JIRAApi(jiraBase + JIRA_REST, jira_user, jira_password)
 
       func(args[2:])
       pw_succeeded = True
     except LoginFailedException as e:
-      keyring.delete_password('crutool', user)
+      keyring.delete_password('crutool', jira_user)
+      keyring.delete_password('crutool', cru_user)
       if e.reason == "AUTHENTICATION_DENIED":
         print "Login failed too many times. Please log in once via " + \
               "the web interface and try again"

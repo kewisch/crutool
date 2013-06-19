@@ -127,6 +127,8 @@ use crutool.ini in your home directory.
     project=CR                                  # The default project key, optional
     cru_base=https://localhost/fisheye          # Path to where your fisheye instance resides
     jira_base=https://localhost/jira            # Path to where your jira instance resides
+    cru_user=john@example.com                   # Fisheye/Crucible login
+    jira_user=johndoe                           # JIRA login
 
     [smtp]
     smtp.from=John Doe <john@example.com>       # Email sender
