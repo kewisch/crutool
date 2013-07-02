@@ -55,6 +55,7 @@ class CRUTool(object):
       return self.cru_review_create(args[1:])
 
     cr = args[0]
+    issue = None
     if cr == "_":
       issue = config.get("cache", "lastissue")
       if issue is None:
@@ -77,9 +78,9 @@ class CRUTool(object):
       'add': self.cru_add_changeset,
     }.get(args[1] if len(args) > 1 else "", self.cru_review_show)
 
-    func(cr, args[2:])
+    func(cr, args[2:], issue=issue)
 
-  def cru_add_changeset(self, cr, args):
+  def cru_add_changeset(self, cr, args, issue=None):
     """Add specific changesets
          crutool review <issue_or_cr> add <repo> <changeset> [changeset2...]
 
@@ -191,17 +192,43 @@ class CRUTool(object):
       print "Created review for %s at %s" % (issue, htmlLink)
 
       # Set the last issue to this issue for further processing
-      config.set("cache", "lastissue", issue)
+      config.set("cache", "lastissue", issue.encode('utf-8'))
+
+      # If the user wants us to transition the issue, do it now
+      self.cru_review_transition_hook(cr, "create", issue)
     else:
       print "An error occurred:",review
 
-  def cru_review_show(self, cr, args):
+  def cru_review_transition_hook(self, cr, action, issue=None):
+    transition = config.get("review", "%s_jira_transition" % action, None)
+    if transition:
+      try:
+        # If we have no issue we need to try to get it from the review
+        if issue is None:
+          review = self.cru.reviewInfo(cr)
+          issueMatch = CRUTool.ISSUE_RE.search(review["name"])
+          if issueMatch:
+            issue = issueMatch.group(0)
+          else:
+            raise UsageException(self.cru_review_transition_hook,
+                  "Could not deduce issue from review information")
+
+        # Now set the issue status
+        print "Review has been set to '%s', setting %s status to '%s'" % (action, issue, transition)
+        self.jira_set(issue, [transition])
+      except UsageException as e:
+        # Either jira_set or the try block itself may throw a UsageException.
+        # Since the important part of this command is to close the review, just
+        # show a warning message
+        print "Warning: %s, not updating JIRA issue" % e.message
+
+  def cru_review_show(self, cr, args, issue=None):
     """Usage: crutool review <issue_or_cr> show"""
     review = self.cru.reviewInfo(cr, True)
     htmlLink =  "%s/cru/%s" % (config.require("defaults", "cru_base"), cr)
     JSONDisplayer.cruReview(review, htmlLink)
 
-  def cru_review_set(self, cr, args):
+  def cru_review_set(self, cr, args, issue=None):
     """Usage: crutool review <issue_or_cr> set <status>""" 
     if len(args) < 1:
       raise UsageException(self.cru_review_set, "Missing status value")
@@ -217,15 +244,22 @@ class CRUTool(object):
     if action in transitions:
       self.cru.setReviewStatus(cr, action)
     elif action == "close" and "summarize" in transitions:
+      # First set to summarize, execute the transition hook
       self.cru.setReviewStatus(cr, "summarize")
+      self.cru_review_transition_hook(cr, "summarize", issue)
+
+      # Now close normally
       self.cru.setReviewStatus(cr, action)
     else:
       raise UsageException(self.cru_review_set,
                            "Invalid transition (expected: %s)" % \
                              (",".join(transitions)))
     print "Status %s set successfully" % action
+
+    # If configured, transition the matching issue
+    self.cru_review_transition_hook(cr, action, issue)
   
-  def cru_pullrequest(self, cr, args):
+  def cru_pullrequest(self, cr, args, issue=None):
     """Usage: crutool review <issue_or_cr> pr <targetbranch> [branch]
        If <branch> is not specified, the issue name will be used.
        If git support is available and you are in your repository,
@@ -272,13 +306,11 @@ class CRUTool(object):
         comment = ci["comment"] if ci else review["name"]
         revisions.append("%s - %s" % (r["toRevision"], ci["comment"]))
 
-    if not issueMatch:
-      # Hmm too bad, the current structure wouldn't allow re-using the
-      # user-entered issue id. Maybe this forces people to reference the
-      # issue.
+    if not issueMatch and not issue:
       raise Exception("Could not deduce issue from review. " +
                       "Use issue id in your commit message")
-    issue = issueMatch.group(0)
+    elif not issue:
+      issue = issueMatch.group(0)
 
     data = {
       'from': config.require("smtp", "from"),
@@ -356,11 +388,23 @@ class CRUTool(object):
     JSONDisplayer.jiraTransitions(self.jira.getTransitions(issue))
 
   def jira_set(self, issue, args):
-    """Usage: crutool jira <issue> set"""
+    """Usage: crutool jira <issue> set [name]"""
     transitions = self.jira.getTransitions(issue)
-    opts,prompt = textOptions({ k: v["name"] for k,v in transitions.iteritems() })
-    ch = raw_input(prompt + " ? ")
-    transId = opts[ch.lower()]
+    transId = None
+    if len(args) == 0:
+      opts,prompt = textOptions({ k: v["name"] for k,v in transitions.iteritems() })
+      ch = raw_input(prompt + " ? ")
+      transId = opts[ch.lower()]
+    elif len(args) == 1:
+      for k,v in transitions.iteritems():
+        if v["name"] == args[0]:
+          transId = k
+          break
+      if transId is None:
+        raise UsageException(self.jira_set, "Transition '%s' not found" %
+                                       (args[0] if len(args) else ""))
+    else:
+        raise UsageException(self.jira_set)
 
     fields = None
     if len(transitions[transId]["fields"]):

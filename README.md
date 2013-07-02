@@ -62,9 +62,10 @@ Jira Module
     # Show possible status transitions for the issue
     crutool jira <issue> transitions
 
-    # Set jira issue status. You will be interactively prompted for the target
-    # state.
-    crutool jira <issue> set
+    # Set jira issue status. If you don't pass a status, you will be
+    # interactively prompted for the target state. You will be prompted for the
+    # required and optional fields.
+    crutool jira <issue> set [status]
 
     # Show bugs assigned to you and open, by priority. Adding "all" shows all
     # summaries, but is slower. Without "all", only first summary is shown.
@@ -130,6 +131,13 @@ use crutool.ini in your home directory.
     cru_user=john@example.com                   # Fisheye/Crucible login
     jira_user=johndoe                           # JIRA login
     ssl_no_verify=False                         # Do not verify SSL certificates (True|False, defaults to False)
+
+    [review]
+    create_jira_transition=Open Code Review     # If set, this JIRA transition will be attempted
+                                                #   when a review is created
+    close_jira_transition=Code Review OK        # If set, this JIRA transition will be attempted
+                                                #   when a review is created
+    # NOTE: This will work for any other transition, i.e. summarize_jira_transition
 
     [smtp]
     smtp.from=John Doe <john@example.com>       # Email sender

@@ -10,12 +10,12 @@ class LoginFailedException(Exception):
     self.reason = reason
 
 class UsageException(Exception):
-  def __init__(self, method, extra=None):
+  def __init__(self, method, message=None):
     self.method = method
-    self.extra = extra
+    self.message = message
 
   def __str__(self):
-    msg = "Error: " + self.extra + "\n" if self.extra else ""
+    msg = "Error: " + self.message + "\n" if self.message else ""
     msg += docstring_trim(self.method.__doc__)
     return msg
 
