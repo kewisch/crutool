@@ -41,8 +41,6 @@ CRU_REST="/rest-service"
 JIRA_REST="/rest/api/latest"
 
 class CRUTool(object):
-  CRU_REVIEW_SET_ALLOWED =  ["summarize", "close", "reopen", "complete", \
-                             "uncomplete", "abandon", "delete"]
   ISSUE_RE = re.compile(r"[A-Z]+-\d+")
 
   # crucible commands
@@ -234,17 +232,17 @@ class CRUTool(object):
 
   def cru_review_set(self, cr, args, issue=None):
     """Usage: crutool review <issue_or_cr> set <status>""" 
-    if len(args) < 1:
-      raise UsageException(self.cru_review_set, "Missing status value")
-
-    action = args[0]
-    if action not in CRUTool.CRU_REVIEW_SET_ALLOWED:
-      raise UsageException(self.cru_review_set,
-                           "Invalid status value (expected: %s)" % \
-                             (",".join(CRUTool.CRU_REVIEW_SET_ALLOWED)))
-
     transitions = map(lambda x: x["displayName"].lower(),
                       self.cru.getTransitions(cr)["transitionData"])
+
+    # Ask for transition if the argument is missing
+    if len(args) < 1:
+      opts,prompt = textOptions({ v: v for v in transitions })
+      ch = raw_input(prompt + " ? ")
+      action = opts[ch.lower()]
+    else:
+      action = args[0]
+
     if action in transitions:
       self.cru.setReviewStatus(cr, action)
     elif action == "close" and "summarize" in transitions:

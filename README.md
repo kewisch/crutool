@@ -16,7 +16,7 @@ Usage
 In most commands, you can use the underscore _ to expand the last referenced
 issue. For example:
 
-    crutool review set CTL-1234
+    crutool review CTL-1234 set
     crutool review _ show
 
 Review (Crucible) Module
@@ -37,12 +37,11 @@ Review (Crucible) Module
     # of your configuration, then you only need to specify the target branch
     crutool review create <targetbranch>
 
-    # Set the review status.
-    # Valid status values are:
-    #   summarize, close, reopen, complete,
-    #   uncomplete, abandon, delete
-    # You can summarize and close at once by using "close"
-    crutool review <issue_or_cr> set <status>
+    # Set the review status. Either set a specific status by passing it on the
+    # commandline or omit the status and get a list of possible actions.
+    # If summarizing is possible you can summarize and close at once by using
+    # status "close".
+    crutool review <issue_or_cr> set [<status>]
 
 Jira Module
 -----------
