@@ -10,6 +10,10 @@ import getpass
 import smtplib
 import os
 
+# TODO temporary
+sys.path.insert(1, "/Users/kewisch/mozilla/github/crutool")
+
+
 from crutool.displayer import JSONDisplayer
 from crutool.exceptions import *
 from crutool.utils import *
@@ -44,28 +48,29 @@ class CRUTool(object):
   # crucible commands
 
   def cru_review(self, args):
-    """Usage: crutool review <issue_or_cr> <set|show|pr> <args>
+    """Usage: crutool review <issue_or_cr> <set|show|add> <args>
        Usage: crutool review create <args>"""
     if len(args) < 1:
       raise UsageException(self.cru_review, "Missing issue/review id")
 
-
-    # special case :-(
-    if args[0] == "create":
-      return self.cru_review_create(args[1:])
-
     cr = args[0]
     issue = None
-    if cr == "_":
+    if cr == "create":
+      return self.cru_review_create(args[1:])
+    elif cr == "_":
       issue = config.get("cache", "lastissue")
       if issue is None:
         raise UsageException(self.cru_review, "No last issue set")
-      cr = self.cru.reviewForIssue(issue)
+      cr = self.cru.reviewForIssue(cr)
+      if cr is None:
+        raise UsageException(self.cru_review, "No open reviews for %s" % issue)
       print "Using %s for issue %s" % (cr, issue)
     elif CRUTool.ISSUE_RE.match(cr) and cr[:2] != "CR":
       # TODO possibly CR is configurable...
       issue = cr
       cr = self.cru.reviewForIssue(cr)
+      if cr is None:
+        raise UsageException(self.cru_review, "No open reviews for %s" % issue)
       print "Using %s for issue %s" % (cr, issue)
       config.set("cache", "lastissue", issue)
     elif cr[:2] != "CR":
@@ -74,7 +79,6 @@ class CRUTool(object):
     func = {
       'show': self.cru_review_show,
       'set': self.cru_review_set,
-      'pr': self.cru_pullrequest,
       'add': self.cru_add_changeset,
     }.get(args[1] if len(args) > 1 else "", self.cru_review_show)
 
@@ -181,7 +185,7 @@ class CRUTool(object):
       csets = args[3:]
 
       issueInfo = self.jira.issueInfo(issue)
-      name = "%s - %s" % (issue, issueInfo["fields"]["summary"]["value"])
+      name = "%s - %s" % (issue, issueInfo["fields"]["summary"])
 
     # Finally, create the review
     review = self.cru.createReview(project, issue, repo, name, csets)
@@ -259,58 +263,50 @@ class CRUTool(object):
     # If configured, transition the matching issue
     self.cru_review_transition_hook(cr, action, issue)
   
-  def cru_pullrequest(self, cr, args, issue=None):
-    """Usage: crutool review <issue_or_cr> pr <targetbranch> [branch]
+  def pullrequest(self, args):
+    """Usage: crutool pr <targetbranch> [branch]
        If <branch> is not specified, the issue name will be used.
        If git support is available and you are in your repository,
        the branch and changesets will be taken from the repository """
-    if len(args) < 1: raise UsageException(self.cru_pullrequest, "Missing target")
+    if len(args) < 1: raise UsageException(self.pullrequest, "Missing target")
 
-    review = self.cru.reviewInfo(cr, True)
-    if review["state"] != "Closed":
-      raise UsageException(self.cru_pullrequest,
-        "Review is %s but should be Closed" % review["state"])
-
-    issue = None
     repo = None
     revisions = []
     target = args[0]
-    if gitSupport:
-      root = gitroot(os.getcwd())
-      gitrepo = git.Repo(root)
-      repo = os.path.basename(root)
-      branch = gitrepo.active_branch if len(args) < 2 else args[1]
+    if not gitSupport:
+      raise UsageException(self.pullrequest, "git support is required")
 
-      rev0 = None
-      for cherry in gitrepo.git.cherry(target).split("\n"):
-        addremove, cset = cherry.split(" ")
-        if addremove == "+":
-          if rev0 is None:
-            rev0 = cset
+    root = gitroot(os.getcwd())
+    gitrepo = git.Repo(root)
+    repo = os.path.basename(root)
+    branch = gitrepo.active_branch if len(args) < 2 else args[1]
 
-          message = gitrepo.commit(cset).message.split("\n", 1)[0].strip()
-          revisions.append("%s - %s" % (cset, message))
+    rev0 = None
+    for cherry in gitrepo.git.cherry(target).split("\n"):
+      addremove, cset = cherry.split(" ")
+      if addremove == "+":
+        if rev0 is None:
+          rev0 = cset
 
-      if len(revisions) == 0:
-        raise UsageException(self.cru_pullrequest,
-                             "No changes against %s" % target)
-      issueMatch = CRUTool.ISSUE_RE.search(gitrepo.commit(rev0).message)
-    
-    else:
-      issueMatch = CRUTool.ISSUE_RE.search(review["name"])
-      repo = review["reviewItems"]["reviewItem"][0]["repositoryName"]
-      branch = issueMatch.group(0) if issueMatch and len(args) < 2 else args[1]
+        message = gitrepo.commit(cset).message.split("\n", 1)[0].strip()
+        revisions.append("%s - %s" % (cset, message))
 
-      for r in review["reviewItems"]["reviewItem"]:
-        ci = self.cru.commitInfo(repo, r["toRevision"])
-        comment = ci["comment"] if ci else review["name"]
-        revisions.append("%s - %s" % (r["toRevision"], ci["comment"]))
-
-    if not issueMatch and not issue:
-      raise Exception("Could not deduce issue from review. " +
+    if len(revisions) == 0:
+      raise UsageException(self.pullrequest,
+                           "No changes against %s" % target)
+    issueMatch = CRUTool.ISSUE_RE.search(gitrepo.commit(rev0).message)
+    if not issueMatch:
+      raise UsageException(self.pullrequest,
+                      "Could not deduce issue from review. " +
                       "Use issue id in your commit message")
-    elif not issue:
-      issue = issueMatch.group(0)
+
+    issue = issueMatch.group(0)
+    cr = self.cru.reviewForIssue(issue)
+    if cr is not None:
+      review = self.cru.reviewInfo(cr, True)
+      if review["state"] != "Closed":
+        raise UsageException(self.pullrequest,
+          "Review is '%s' but should be Closed" % review["state"])
 
     data = {
       'from': config.require("smtp", "from"),
@@ -349,7 +345,8 @@ class CRUTool(object):
 
   # jira commands
   def jira_main(self, args):
-    """Usage: crutool jira <issue> <show|transitions|set> <args>"""
+    """Usage: crutool jira <issue> <show|transitions|set> <args>
+       Usage: crutool jira todo"""
     if len(args) < 1: raise UsageException(self.jira_main)
 
     issue = args[0]
@@ -374,9 +371,8 @@ class CRUTool(object):
     return func(issue, args[2:])
 
   def jira_todo(self, args):
-    """Usage: crutool jira todo [all]"""
-    expandAll = (len(args) and args[0] == "all")
-    JSONDisplayer.jiraDashboard(self.jira.dashboard(expandAll))
+    """Usage: crutool jira todo"""
+    JSONDisplayer.jiraDashboard(self.jira.dashboard())
 
   def jira_create(self, args):
     # Put this here for the future, and in case someone assumes it exists
@@ -390,32 +386,34 @@ class CRUTool(object):
   def jira_set(self, issue, args):
     """Usage: crutool jira <issue> set [name]"""
     transitions = self.jira.getTransitions(issue)
-    transId = None
+    transInfo = None
     if len(args) == 0:
-      opts,prompt = textOptions({ k: v["name"] for k,v in transitions.iteritems() })
+      opts,prompt = textOptions({
+        v["name"]: v for v in transitions["transitions"]
+      })
       ch = raw_input(prompt + " ? ")
-      transId = opts[ch.lower()]
+      transInfo = opts[ch.lower()]
     elif len(args) == 1:
-      for k,v in transitions.iteritems():
+      for v in transitions["transitions"]:
         if v["name"] == args[0]:
-          transId = k
+          transInfo = v
           break
-      if transId is None:
+      if transInfo is None:
         raise UsageException(self.jira_set, "Transition '%s' not found" %
                                        (args[0] if len(args) else ""))
     else:
         raise UsageException(self.jira_set)
 
     fields = None
-    if len(transitions[transId]["fields"]):
+    if len(transInfo["fields"]):
       fields = {}
-      for field in transitions[transId]["fields"]:
+      for name,field in transInfo["fields"].iteritems():
         req = " (optional)" if not field["required"] else " (required)"
-        val = raw_input(field["id"] + req + ": ")
+        val = raw_input(name + req + ": ")
         if field["required"] or len(val):
-          fields[field["id"]] = val
+          fields[name] = { "name": val }
 
-    self.jira.transitionIssue(issue, int(transId), fields=fields)
+    self.jira.transitionIssue(issue, int(transInfo["id"]), fields=fields)
 
   def jira_show(self, issue, args):
     info = self.jira.issueInfo(issue)
@@ -461,6 +459,7 @@ class CRUTool(object):
     func = {
       'review': self.cru_review,
       'jira': self.jira_main,
+      'pr': self.pullrequest,
       'authclear': self.auth_clear,
       'api': self.api_call,
       '_': self.lastissue,

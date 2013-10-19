@@ -20,11 +20,12 @@ class JIRAApi(Resource):
     return super(JIRAApi, self).request(uri, *args, **kwargs)
 
   def getTransitions(self, issue):
-    return self.get("/issue/%s/transitions" % issue)
+    params = { "expand": "transitions.fields" }
+    return self.get("/issue/%s/transitions" % issue, params=params)
 
   def transitionIssue(self, issue, transId, fields=None, update=None):
     body = {
-      "transition": transId
+      "transition": { "id": transId }
     }
 
     if fields:
@@ -37,12 +38,6 @@ class JIRAApi(Resource):
   def issueInfo(self, issue):
     return self.get("/issue/%s" % issue);
 
-  def dashboard(self, expandAll=False):
+  def dashboard(self):
     params = { "jql": "assignee=%s and status=open order by priority" % self.username }
-    issues = self.get("/search", params=params)
-    for i in range(0, len(issues["issues"])):
-      issue = issues["issues"][i]
-      issues["issues"][i] = self.issueInfo(issues["issues"][i]["key"])
-      if not expandAll: break
-
-    return issues
+    return self.get("/search", params=params)

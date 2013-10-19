@@ -14,7 +14,7 @@ def json_pp(obj):
 def textOptions(kv):
   optprompt = []
   opts = {}
-  for v,s in kv.iteritems():
+  for s,v in kv.iteritems():
     x = 0
     while s[x].lower() in opts: x += 1
     opts[s[x].lower()] = v

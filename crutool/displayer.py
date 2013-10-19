@@ -9,6 +9,7 @@ from .config import *
 import locale
 import datetime
 import dateutil.parser
+from textwrap import TextWrapper
 
 class JSONDisplayer(object):
   @staticmethod
@@ -16,28 +17,25 @@ class JSONDisplayer(object):
     fields = obj["fields"]
     fields["htmlURL"] = htmlLink
     # Uncomment to edit template:
-    #print json_pp(fields)
+    # print json_pp(fields)
     print config.format("templates", "issue", fields)
 
   @staticmethod
   def jiraTransitions(obj):
-    for trans in obj.itervalues():
+    for trans in obj["transitions"]:
       fields = []
-      for field in trans["fields"]:
+      for name, field in trans["fields"].iteritems():
         if field["required"]:
-          fields.append("\033[1m%s\033[0m" % field["id"])
+          fields.append("\033[1m%s\033[0m" % name)
         else:
-          fields.append(field["id"])
+          fields.append(name)
       print "%s (%s)" % (trans["name"], ",".join(fields))
 
   @staticmethod
   def jiraDashboard(obj):
     # print json_pp(obj)
     for issue in obj["issues"]:
-      if "fields" in issue and "summary" in issue["fields"]:
-        print "%s - %s" % (issue["key"], issue["fields"]["summary"]["value"])
-      else:
-        print "%s" % issue["key"]
+      print "%s - %s" % (issue["key"], issue["fields"]["summary"])
 
     total = int(obj["total"])
     maxres = int(obj["maxResults"])
@@ -96,23 +94,30 @@ class JSONDisplayer(object):
       cmtstr += "\n\n"
     obj["fmt_general_comments"] = cmtstr.strip()
 
+    def addComment(cmt):
+      cmtstr = ""
+      if cmt.get("draft", False) or cmt.get("deleted", False): return
+
+      if cmt.get("defectRaised", False):
+        cmtstr += "\033[31m[defect]\033[0m"
+
+      cmtstr += "\033[34m%s\033[0m:" % cmt["user"]["displayName"]
+      cmtstr += "\n"
+      if "toLineRange" in cmt:
+        cmtstr += "Line %s: " % cmt["toLineRange"]
+      cmtstr += cmt["message"]
+      return cmtstr
+
     # Replace versioned comments array with formatted comments
     cmtstr = ""
+    wrapper = TextWrapper(initial_indent="    ", subsequent_indent="    ", width=120)
     for cmt in obj["versionedComments"]["comments"]:
-      cmtstr += "Line %s: <initial comment and file not provided by API>\n" % cmt["toLineRange"]
+      cmtstr += addComment(cmt) + "\n"
 
       for r in cmt["replies"]:
-        if r["draft"] or r["deleted"]: continue
+        cmtstr += wrapper.fill(addComment(r)) + "\n"
 
-        if r["defectRaised"]:
-          cmtstr += "\033[31m[defect]\033[0m"
-
-        cmtstr += "\033[34m%s\033[0m:" % r["user"]["displayName"]
-        cmtstr += "\n"
-        cmtstr += r["message"]
-        cmtstr += "\n"
-      if len(cmt["replies"]):
-        cmtstr += "\n" 
+      cmtstr += "\n\n" 
     obj["fmt_versioned_comments"] = cmtstr.strip()
 
     # Uncomment to edit template:

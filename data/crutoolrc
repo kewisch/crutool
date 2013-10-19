@@ -1,12 +1,12 @@
 [templates]
-issue=    \033[1mSummary\033[0m: {summary[value]}
+issue=    \033[1mSummary\033[0m: {summary}
           \033[1mURL\033[0m: {htmlURL}
-     \033[1mAssigned\033[0m: {assignee[value][displayName]}
-    \033[1mComponent\033[0m: {components[value][0][name]}
-       \033[1mStatus\033[0m: {status[value][name]}
+     \033[1mAssigned\033[0m: {assignee[displayName]}
+    \033[1mComponent\033[0m: {components[0][name]}
+       \033[1mStatus\033[0m: {status[name]}
 
   \033[1mDescription\033[0m:
-  {description[value]}
+  {description}
 review=   \033[1mSummary\033[0m: {name}
          \033[1mURL\033[0m: {htmlURL}
       \033[1mAuthor\033[0m: {author[displayName]}

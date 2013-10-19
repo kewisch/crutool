@@ -44,15 +44,6 @@ Review (Crucible) Module
     # You can summarize and close at once by using "close"
     crutool review <issue_or_cr> set <status>
 
-    # Send a pullrequest email. If git support is not installed, revision
-    # information will be taken from the review and if not specified the branch
-    # name will be the issue id. This may be more than you want, especially if
-    # you have rebased. Git support is highly recommended.  With git support,
-    # revision information and branch (if not specified) is taken from 'git
-    # cherry' and the active branch. Be sure to set up the [smtp] section of
-    # your config file.
-    crutool review <issue_or_cr> pr <targetbranch> [branch]
-
 Jira Module
 -----------
     # Show information about the issue
@@ -67,9 +58,16 @@ Jira Module
     # required and optional fields.
     crutool jira <issue> set [status]
 
-    # Show bugs assigned to you and open, by priority. Adding "all" shows all
-    # summaries, but is slower. Without "all", only first summary is shown.
-    crutool jira todo [all]
+    # Show bugs assigned to you and open, by priority.
+    crutool jira todo
+
+Pull Requests
+-------------
+    # Send a pullrequest email. This command requires git support to function
+    # correctly. Revision information and branch (if not specified) are taken
+    # from 'git cherry' and the active branch. Be sure to set up the [smtp]
+    # section of your config file.
+    crutool review <issue_or_cr> pr <targetbranch> [branch]
 
 Other Commands
 --------------
@@ -87,7 +85,7 @@ Typical Workflow
 ================
 
 First of all, create the issue via web interface. Unfortunately this is not
-possible with the Jira 4.x REST API. For sake of argument, 'next' is the branch
+possible with crutool yet. For sake of argument, 'next' is the branch
 the feature is heading for.
 
     crutool jira CTL-1234 set # Select 'Start Progress'
@@ -108,7 +106,7 @@ Now fix the review comments, then commit.
 
     git commit -m "CTL-1234 - Whitespace fix"
     git push myremote `crutool _`
-    crutool review _ add next # TODO Not yet implemented
+    crutool review _ add next
 
 You are done with the review. Summarize and close it:
 
@@ -116,7 +114,7 @@ You are done with the review. Summarize and close it:
 
 Finally, rebase your changes and send a pull request via email:
     git rebase -i next
-    crutool review  _ pr
+    crutool pr next
 
 Configuration
 =============

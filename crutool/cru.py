@@ -24,15 +24,17 @@ class CRUApi(Resource):
     params = { "action": "action:%sReview" % status }
     return self.post("/reviews-v1/%s/transition" % cr, params=params)
    
-  def reviewForIssue(self, issue):
+  def reviewForIssue(self, issue, openOnly=True):
     # TODO reviewsForIssue doesn't work with the bare issue mentioned
     params = { "term": issue, "maxReturn": 20 }
     data = self.get("/search-v1/reviews", params=params)
     reviews = data["reviewData"]
     if len(reviews):
       for rev in reviews:
+        if rev["state"] == "Draft" or (openOnly and rev["state"] != "Review"):
+          continue
         if issue in rev["name"]:
-          return  rev["permaId"]["id"]
+          return rev["permaId"]["id"]
     return None
 
   def getTransitions(self, cr):

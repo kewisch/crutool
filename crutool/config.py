@@ -9,12 +9,14 @@ from collections import defaultdict
 from .utils import dict_merge
 from .exceptions import ConfigMissingException
 from iniparse import INIConfig
+from string import Formatter
 
 class CRUToolConfig(object):
   def __init__(self):
     self.defaultConfig = {}
     self.userConfig = {}
     self.dirty = False
+    self.formatter = SafeFormatter()
 
   def readDefaultFile(self):
     fullpath = os.path.join(os.path.dirname(__file__), "..", "crutoolrc")
@@ -57,7 +59,14 @@ class CRUToolConfig(object):
     return self.get(section, key, exception=True)
 
   def format(self, section, key, data):
-    return self.get(section, key, "").decode('utf-8').format(**data)
+    return self.formatter.format(self.get(section, key, "").decode('utf-8'), **data)
+
+class SafeFormatter(Formatter):
+    def get_field(self, field_name, args, kwargs):
+      try:
+        return super(SafeFormatter, self).get_field(field_name, args, kwargs)
+      except:
+        return ("None", "none")
 
 # our global instance
 config = CRUToolConfig()
