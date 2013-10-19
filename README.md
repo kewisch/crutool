@@ -19,6 +19,19 @@ issue. For example:
     crutool review CTL-1234 set
     crutool review _ show
 
+If you have git support enabled, you can also use @ to reference the issue
+found in the active branch name:
+
+    $ cat .git/HEAD
+    ref: refs/heads/CTL-1234-feature
+    $ crutool jira @ show
+    Using issue CTL-1234 from git branch
+    ...
+    $ crutool review @ show
+    Using CR-678 for issue CTL-1234
+    ...
+
+
 Review (Crucible) Module
 ------------------------
     # Show information about the review
@@ -99,17 +112,17 @@ Now fix your bugs. All of them.
 
 Wait for your team to review the code. Then check if there are comments:
 
-    crutool review _ show
+    crutool review @ show
 
 Now fix the review comments, then commit.
 
     git commit -m "CTL-1234 - Whitespace fix"
     git push myremote `crutool _`
-    crutool review _ add next
+    crutool review @ add next
 
 You are done with the review. Summarize and close it:
 
-    crutool review _ set close
+    crutool review @ set close
 
 Finally, rebase your changes and send a pull request via email:
     git rebase -i next

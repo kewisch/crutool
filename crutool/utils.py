@@ -7,6 +7,15 @@ import os
 import sys
 import json
 import datetime
+import re
+
+try:
+  import git
+  gitSupport = True
+except:
+  gitSupport = False
+
+ISSUE_RE = re.compile(r"[A-Z]+-\d+")
 
 def json_pp(obj):
   return json.dumps(obj, sort_keys=True, indent=2, separators=(',', ': '))
@@ -79,3 +88,22 @@ def docstring_trim(docstring):
         trimmed.pop(0)
     # Return a single string:
     return '\n'.join(trimmed)
+
+def isPlaceholder(placeholder):
+  return placeholder in ["@","_"]
+
+def translatePlaceholder(placeholder, asReview=False):
+    issue = None
+    if placeholder == "_":
+      issue = config.get("cache", "lastissue")
+      if issue is not  None:
+        print "Using last issue %s" % issue
+    elif placeholder == "@" and gitSupport:
+      root = gitroot(os.getcwd())
+      repo = git.Repo(root)
+      branch = repo.active_branch.name
+      issueMatch = ISSUE_RE.search(branch)
+      if issueMatch is not None:
+        issue = issueMatch.group(0)
+        print "Using issue %s from git branch" % issue
+    return issue

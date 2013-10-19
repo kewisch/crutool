@@ -41,7 +41,6 @@ CRU_REST="/rest-service"
 JIRA_REST="/rest/api/latest"
 
 class CRUTool(object):
-  ISSUE_RE = re.compile(r"[A-Z]+-\d+")
 
   # crucible commands
 
@@ -55,15 +54,16 @@ class CRUTool(object):
     issue = None
     if cr == "create":
       return self.cru_review_create(args[1:])
-    elif cr == "_":
-      issue = config.get("cache", "lastissue")
+    elif isPlaceholder(cr):
+      issue = translatePlaceholder(cr)
       if issue is None:
-        raise UsageException(self.cru_review, "No last issue set")
-      cr = self.cru.reviewForIssue(cr)
+        raise UsageException(self.cru_main, "Could not figure out what % expands to" % args[0])
+
+      cr = self.cru.reviewForIssue(issue)
       if cr is None:
         raise UsageException(self.cru_review, "No open reviews for %s" % issue)
       print "Using %s for issue %s" % (cr, issue)
-    elif CRUTool.ISSUE_RE.match(cr) and cr[:2] != "CR":
+    elif ISSUE_RE.match(cr) and cr[:2] != "CR":
       # TODO possibly CR is configurable...
       issue = cr
       cr = self.cru.reviewForIssue(cr)
@@ -165,7 +165,7 @@ class CRUTool(object):
                              "No changes against %s" % target)
       cset0 = csets[0]
       name = gitrepo.commit(cset0).message
-      issue = CRUTool.ISSUE_RE.search(name)
+      issue = ISSUE_RE.search(name)
       if issue is None: raise UsageException(self.cru_review_create, "Commit message does not contain issue id (%s)" % csets[0].message)
       issue = issue.group(0)
     
@@ -208,7 +208,7 @@ class CRUTool(object):
         # If we have no issue we need to try to get it from the review
         if issue is None:
           review = self.cru.reviewInfo(cr)
-          issueMatch = CRUTool.ISSUE_RE.search(review["name"])
+          issueMatch = ISSUE_RE.search(review["name"])
           if issueMatch:
             issue = issueMatch.group(0)
           else:
@@ -292,7 +292,7 @@ class CRUTool(object):
     if len(revisions) == 0:
       raise UsageException(self.pullrequest,
                            "No changes against %s" % target)
-    issueMatch = CRUTool.ISSUE_RE.search(gitrepo.commit(rev0).message)
+    issueMatch = ISSUE_RE.search(gitrepo.commit(rev0).message)
     if not issueMatch:
       raise UsageException(self.pullrequest,
                       "Could not deduce issue from review. " +
@@ -352,13 +352,12 @@ class CRUTool(object):
       return self.jira_create(args[1:])
     elif issue == "todo":
       return self.jira_todo(args[1:])
-    elif issue == "_":
-      issue = config.get("cache", "lastissue")
+    elif isPlaceholder(issue):
+      issue = translatePlaceholder(issue)
       if issue is None:
-        raise UsageException(self.jira_main, "No last issue set")
-      print "Using last issue %s" % issue
-    else:
-      config.set("cache", "lastissue", issue)
+        raise UsageException(self.jira_main, "Could not figure out what % expands to" % args[0])
+
+    config.set("cache", "lastissue", issue)
 
     func = {
       'show': self.jira_show,
