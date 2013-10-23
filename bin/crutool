@@ -10,10 +10,6 @@ import getpass
 import smtplib
 import os
 
-# TODO temporary
-sys.path.insert(1, "/Users/kewisch/mozilla/github/crutool")
-
-
 from crutool.displayer import JSONDisplayer
 from crutool.exceptions import *
 from crutool.utils import *
