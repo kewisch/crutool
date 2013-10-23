@@ -327,7 +327,7 @@ class CRUTool(object):
     user = config.require("smtp", "username")
     password = keyring.get_password('crutool-smtp', user)
     if password is None:
-      password = getpass.getpass("SMTP Password:")
+      password = getpass.getpass("SMTP Password [%s]:" % user)
       keyring.set_password('crutool-smtp', user, password)
 
     smtp.login(user, password)
@@ -416,8 +416,27 @@ class CRUTool(object):
   # auth commands
   
   def auth_clear(self, args):
-    user = os.getenv("CRU_USER") or getpass.getuser()
-    keyring.delete_password('crutool', user)
+    cru_user = os.getenv("CRU_USER") or getpass.getuser()
+    if cru_user:
+      try:
+        keyring.delete_password('crutool', cru_user)
+      except keyring.errors.PasswordDeleteError:
+        pass
+
+    jira_user = os.getenv("JIRA_USER") or getpass.getuser()
+    if jira_user:
+      try:
+        keyring.delete_password('crutool', jira_user)
+      except keyring.errors.PasswordDeleteError:
+        pass
+
+    smtp_user = config.get("smtp", "username", None)
+    if smtp_user:
+      try:
+        keyring.delete_password('crutool-smtp', smtp_user)
+      except keyring.errors.PasswordDeleteError:
+        pass
+
     print "Authentication cleared"
 
   # api methods
@@ -449,26 +468,17 @@ class CRUTool(object):
     def defaultAction(args):
       raise UsageException(self.main)
 
-    func = {
-      'review': self.cru_review,
-      'jira': self.jira_main,
-      'pr': self.pullrequest,
-      'authclear': self.auth_clear,
-      'api': self.api_call,
-      '_': self.lastissue,
-    }.get(args[1] if len(args) > 1 else "", defaultAction)
+    def setupAuthentication():
+      cru_user = os.getenv("CRU_USER") or config.get('defaults', 'cru_user', getpass.getuser())
+      cru_password = keyring.get_password('crutool', cru_user)
+      jira_user = os.getenv("JIRA_USER") or config.get('defaults', 'jira_user', getpass.getuser())
+      jira_password = keyring.get_password('crutool', jira_user)
 
-    cru_user = os.getenv("CRU_USER") or config.get('defaults', 'cru_user', getpass.getuser())
-    cru_password = keyring.get_password('crutool', cru_user)
-    jira_user = os.getenv("JIRA_USER") or config.get('defaults', 'jira_user', getpass.getuser())
-    jira_password = keyring.get_password('crutool', jira_user)
-
-    try:
       if jira_password is None:
-        jira_password = getpass.getpass("%s's Password:" % jira_user)
+        jira_password = getpass.getpass("JIRA Password [%s]:" % jira_user)
         keyring.set_password('crutool', jira_user, jira_password)
       if cru_password is None:
-        cru_password = getpass.getpass("%s's Password:" % cru_user)
+        cru_password = getpass.getpass("Crucible Password [%s]:" % cru_user)
         keyring.set_password('crutool', cru_user, cru_password)
 
       cruBase = config.require("defaults", "cru_base")
@@ -476,8 +486,27 @@ class CRUTool(object):
       self.cru = CRUApi(cruBase + CRU_REST, cru_user, cru_password)
       self.jira = JIRAApi(jiraBase + JIRA_REST, jira_user, jira_password)
 
+    action = args[1] if len(args) > 1 else ""
+
+    try:
+      # First try the passwordless functions
+      func = {
+        'authclear': self.auth_clear,
+        '_': self.lastissue,
+      }.get(action, None)
+
+      # If we need a password, set up authentication and select the right action
+      if func is None:
+        setupAuthentication()
+        func = {
+          'review': self.cru_review,
+          'jira': self.jira_main,
+          'pr': self.pullrequest,
+          'api': self.api_call,
+        }.get(action, defaultAction)
+
+      # Now call it with the remaining arguments
       func(args[2:])
-      pw_succeeded = True
     except LoginFailedException as e:
       keyring.delete_password('crutool', jira_user)
       keyring.delete_password('crutool', cru_user)
