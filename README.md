@@ -175,11 +175,13 @@ If you use git alot, you might find yourself typing "git jira" even though you m
     [alias]
     jira = !crutool jira
     review = !crutool review
+    pr = !crutool pr
 
 Then you can use git like this:
 
     git jira CTL-1234 show
     git review create CR next
+    git pr next
 
 Installation
 ============
