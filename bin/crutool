@@ -444,7 +444,7 @@ class CRUTool(object):
   # main method
 
   def main(self, args):
-    """Usage: crutool <jira|review|authclear|api|_> <args>"""
+    """Usage: crutool <jira|review|pr|authclear|api|_> <args>"""
 
     def defaultAction(args):
       raise UsageException(self.main)
