@@ -8,6 +8,7 @@ import sys
 import json
 import datetime
 import re
+import string
 
 try:
   import git
@@ -25,10 +26,16 @@ def textOptions(kv):
   opts = {}
   for s,v in kv.iteritems():
     x = 0
-    while s[x].lower() in opts: x += 1
-    opts[s[x].lower()] = v
+    while x < len(s) and s[x] in string.ascii_letters and s[x].lower() in opts:
+      x += 1
 
-    s = s[:x] + ("(%s)" % s[x]) + s[x+1:]
+    if x == len(s) or s[x] not in string.ascii_letters:
+      # couldn't find a letter, use whole string
+      opts[s.lower()] = v
+    else:
+      # use first found letter
+      opts[s[x].lower()] = v
+      s = s[:x] + ("(%s)" % s[x]) + s[x+1:]
     optprompt.append(s)
 
   return opts,", ".join(optprompt)

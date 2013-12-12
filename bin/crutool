@@ -401,10 +401,26 @@ class CRUTool(object):
     if len(transInfo["fields"]):
       fields = {}
       for name,field in transInfo["fields"].iteritems():
-        req = " (optional)" if not field["required"] else " (required)"
-        val = raw_input(name + req + ": ")
+        fieldStrings = ''
+        opts = {}
+
+        if 'allowedValues' in field:
+          opts,prompt = textOptions({
+            v["name"]: v['name'] for v in field['allowedValues']
+          })
+          fieldStrings = ' (%s)' % prompt
+
+        req = "required" if field["required"] else "optional"
+        val = raw_input("[%s] %s%s: " % (req, name, fieldStrings))
         if field["required"] or len(val):
-          fields[name] = { "name": val }
+          if val.lower() in opts:
+            val = opts[val.lower()]
+
+          if field['schema']['type'] == 'array':
+            fieldvals = re.split(r"[,\s]+", val)
+            fields[name] = map(lambda x: { 'name': x }, fieldvals)
+          else:
+            fields[name] = { 'name': val }
 
     self.jira.transitionIssue(issue, int(transInfo["id"]), fields=fields)
 
