@@ -42,3 +42,14 @@ pullrequest=From: {from}
 
   Thanks,
   {from}
+
+stashPullrequest=\033[34m#{id} - {title}\033[0m
+            \033[1mFrom\033[0m: {fromRef[repository][project][key]}/{fromRef[repository][name]}/{fromRef[displayId]}
+              \033[1mTo\033[0m: {toRef[repository][project][key]}/{toRef[repository][name]}/{toRef[displayId]}
+              \033[1mURL\033[0m: {fmt_baseUri}{link[url]}
+           \033[1mAuthor\033[0m: {author[user][displayName]}
+        \033[1mReviewers\033[0m:
+          {fmt_reviewers_completed_color}
+          {fmt_reviewers_uncompleted_color}
+      \033[1mDescription\033[0m:
+      {description}

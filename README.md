@@ -73,6 +73,46 @@ Jira Module
     # Show bugs assigned to you and open, by priority.
     crutool jira todo
 
+Stash Module (Experimental)
+---------------------------
+
+NOTE: The stash module is still work in progress, you might come across various
+errors.
+
+Stash has the notion of projects and repositories. Next to a few public
+projects, mostly specified by a few uppercase letters there are also per-user
+projects. Those are specified with names like '~kewisch'. Especially on unix
+systems, don't bother escaping the ~. crutool will automatically convert the
+expanded value back into its original form.
+
+For the stash module to work, GitPython is almost always required. Some
+settings depend on correct configuration of git branches. Specifically, when
+creating pull requests, the target branch must be tracking an upstream remote.
+You can check this by looking at your .git/config file. If there is a section
+for the branch that specifies the correct upstream remote, you have correctly
+configured your branches.
+
+    # Show a list of projects in the stash instance
+    crutool stash projects
+
+    # Show repositories in the CTL project
+    crutool stash repos CTL
+
+    # Show repositories in the same project as the git repository you are in
+    crutool stash repos
+
+    # Show pull requests for the current repository
+    crutool stash pr show
+
+    # Show pull requests for the current repository, but in another project
+    crutool stash pr show CTL
+
+    # Show pull requests for the given project and repository
+    crutool stash pr show CTL crutool-helper-repo
+
+    # Creates a pull request to merge the currently active branch into master
+    crutool stash pr create master
+
 Pull Requests
 -------------
     # Send a pullrequest email. This command requires git support to function

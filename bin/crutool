@@ -17,6 +17,7 @@ from crutool.config import config
 
 from crutool.cru import CRUApi
 from crutool.jira import JIRAApi
+from crutool.stash import StashApi
 
 try:
   import git
@@ -35,6 +36,7 @@ if config.get("defaults", "debug", False):
 
 CRU_REST="/rest-service"
 JIRA_REST="/rest/api/latest"
+STASH_REST="/rest/api/latest"
 
 class CRUTool(object):
 
@@ -429,6 +431,126 @@ class CRUTool(object):
     htmlLink =  "%s/browse/%s" % (config.get("defaults", "jira_base"), issue)
     JSONDisplayer.issue(info, htmlLink)
 
+  # stash commands
+
+  def stash_main(self, args):
+    """Usage: crutool stash <repos|pr> <args>"""
+    func = {
+      'repos': self.stash_repos,
+      'projects': self.stash_projects,
+      'pr': self.stash_pr,
+    }.get(args[0] if len(args) > 0 else "", None)
+
+    if func is None:
+      raise UsageException(self.stash_main)
+
+    return func(args[1:])
+
+  def stash_projects(self, args):
+    projects = self.stash.projects()
+    JSONDisplayer.stashProjects(projects, config.require("defaults", "stash_base"))
+
+  def stash_repos(self, args):
+    """Usage: crutool stash repos <project>"""
+
+    if gitSupport and len(args) < 1:
+      project,_,_,_ = getRepoProps()
+    elif len(args) > 0:
+      project = untangleProject(args[0])
+    else:
+      raise UsageException(self.stash_repos)
+
+    repos = self.stash.repos(project)
+    JSONDisplayer.stashRepos(repos)
+
+  def stash_pr(self, args):
+    """Usage: crutool stash pr <show|create> <args>"""
+    if len(args) < 1: raise UsageException(self.stash_pr)
+
+    func = {
+      'show': self.stash_pr_show,
+      'create': self.stash_pr_create,
+    }.get(args[0], None)
+
+    if func is None:
+      raise UsageException(self.stash_pr, "Unknown command %s" % args[0])
+
+    return func(args[1:])
+
+  def stash_pr_show(self, args):
+    """Usage: crutool stash pr show <project> <repo>
+       Usage: crutool stash pr show <project>
+       Usage: crutool stash pr show"""
+    project = None
+    repo = None
+    if gitSupport and len(args) <= 1:
+      root = gitroot(os.getcwd())
+      gitrepo = git.Repo(root)
+      thisproject,thisrepo,_,thisurl = getRepoProps()
+
+      if len(args) == 0:
+        repo = thisrepo
+        project = thisproject
+      else:
+        repo = thisrepo
+        project = untangleProject(args[0])
+    elif len(args) == 2:
+      project = untangleProject(args[0])
+      repo = args[1]
+
+    if not project or not repo:
+      raise UsageException(self.stash_pr_show,
+        "Missing project or repo, please configure your git repository")
+
+    prs = self.stash.pullrequests(project, repo)
+    JSONDisplayer.stashPullrequests(prs, config.require("defaults", "stash_base"))
+
+  def stash_pr_create(self, args):
+    """Usage: crutool stash pr create <target-branch>"""
+    if len(args) < 1: raise UsageException(self.stash_pr_create)
+
+    root = gitroot(os.getcwd())
+    gitrepo = git.Repo(root)
+    target = args[0]
+
+    targetproject,targetrepo,targetref,targeturl = getRepoProps(target)
+    thisproject,thisrepo,thisref,thisurl = getRepoProps()
+
+    csets = []
+    for cherry in gitrepo.git.cherry(target).split("\n"):
+      addremove, cset = cherry.split(" ")
+      if addremove == "+":
+        csets.append(cset)
+
+    message = gitrepo.commit(csets[0]).message
+    issue = ISSUE_RE.search(message)
+    if issue is None: raise UsageException(self.cru_review_create, "Commit message does not contain issue id (%s)" % csets[0].message)
+    issue = issue.group(0)
+
+    messages = map(lambda x: gitrepo.commit(x).message.strip(), csets)
+
+    if len(csets) < 5:
+      csetmsg = "\n".join(map(lambda x: " - ".join(x), zip(csets, messages)))
+      csetmsg = "changesets:\n" + csetmsg
+    else:
+      csetmsg = "%d changesets" % len(csets)
+
+    print "Creating pull request for %s using %s/%s -> %s/%s with %s" % (issue, thisproject, gitrepo.active_branch, targetproject, target, csetmsg)
+
+    description = "\n".join(map(lambda x: gitrepo.commit(x).message.strip(), csets))
+
+    self.stash.createPullrequest(
+      title=message,
+      description=description,
+      fromId=thisref,
+      fromRepo=thisrepo,
+      fromProject=thisproject,
+      toId=targetref,
+      toRepo=targetrepo,
+      toProject=targetproject
+    )
+
+
   # auth commands
   
   def auth_clear(self, args):
@@ -457,7 +579,7 @@ class CRUTool(object):
 
   # api methods
   def api_call(self, args):
-    """Usage: crutool api <jira|cru> <http_method> <url> [header=value...]"""
+    """Usage: crutool api <jira|cru|stash> <http_method> <url> [header=value...]"""
     if len(args) < 3: raise UsageException(self.api_call, "Missing arguments")
     api, method, uri = args[:3]
     params = {}
@@ -479,7 +601,7 @@ class CRUTool(object):
   # main method
 
   def main(self, args):
-    """Usage: crutool <jira|review|pr|authclear|api|_> <args>"""
+    """Usage: crutool <jira|review|stash|pr|authclear|api|_> <args>"""
 
     def defaultAction(args):
       raise UsageException(self.main)
@@ -499,8 +621,10 @@ class CRUTool(object):
 
       cruBase = config.require("defaults", "cru_base")
       jiraBase = config.require("defaults", "jira_base")
+      stashBase = config.require("defaults", "stash_base")
       self.cru = CRUApi(cruBase + CRU_REST, cru_user, cru_password)
       self.jira = JIRAApi(jiraBase + JIRA_REST, jira_user, jira_password)
+      self.stash = StashApi(stashBase + STASH_REST, jira_user, jira_password)
 
     action = args[1] if len(args) > 1 else ""
 
@@ -517,6 +641,7 @@ class CRUTool(object):
         func = {
           'review': self.cru_review,
           'jira': self.jira_main,
+          'stash': self.stash_main,
           'pr': self.pullrequest,
           'api': self.api_call,
         }.get(action, defaultAction)

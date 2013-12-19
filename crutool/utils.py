@@ -114,3 +114,29 @@ def translatePlaceholder(placeholder, asReview=False):
         issue = issueMatch.group(0)
         print "Using issue %s from git branch" % issue
     return issue
+
+
+def getRepoProps(head=None):
+  root = gitroot(os.getcwd())
+  gitrepo = git.Repo(root)
+
+  if head is None:
+    head = gitrepo.active_branch.name
+
+  config = gitrepo.heads[head].config_reader()
+  remote = config.get_value("remote", default="origin")
+  ref = config.get_value("merge", default="refs/heads/%s" % head) or None
+  url = gitrepo.remotes[remote].config_reader.get_value("url", default=None)
+
+  parts = url.split("/")
+  project = parts[-2]
+  repo = parts[-1].replace(".git", "")
+
+  return project,repo,ref,url
+
+def untangleProject(project):
+  _,username = os.path.split(project)
+  userpath = os.path.expanduser("~" + username)
+  if project.startswith(userpath):
+    project = "~" + username
+  return project

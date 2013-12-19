@@ -127,4 +127,42 @@ class JSONDisplayer(object):
   @staticmethod
   def pullRequest(obj):
     return config.format("templates", "pullrequest", obj)
+
+  @staticmethod
+  def stashProjects(obj, baseUri):
+    for project in obj["values"]:
+      print "{: >10} {: <30} {: <20}".format(project["key"], project["name"], baseUri + project['link']['url'])
     
+  @staticmethod
+  def stashRepos(obj):
+    for repos in obj["values"]:
+      print "{: <40} {}".format(repos["name"] + ":", repos["cloneUrl"])
+
+  @staticmethod
+  def stashPullrequests(obj, baseUri):
+    # Uncomment to edit template:
+    # print json_pp(obj)
+
+    for pr in obj["values"]:
+      reviewers = []
+      reviewers_color = []
+      reviewers_completed_color = []
+      reviewers_uncompleted_color = []
+      for r in pr["reviewers"]:
+        if r["user"]["active"]:
+          reviewers.append(r["user"]["displayName"])
+          if r["approved"]:
+            name = "\033[32m%s\033[0m" % r["user"]["displayName"]
+            reviewers_completed_color.append(name)
+            reviewers_color.append(name)
+          else:
+            name = "\033[31m%s\033[0m" % r["user"]["displayName"]
+            reviewers_uncompleted_color.append(name)
+            reviewers_color.append(name)
+      pr["fmt_reviewers"] = ", ".join(reviewers)
+      pr["fmt_reviewers_color"] = ", ".join(reviewers_color)
+      pr["fmt_reviewers_uncompleted_color"] = ", ".join(reviewers_uncompleted_color)
+      pr["fmt_reviewers_completed_color"] = ", ".join(reviewers_completed_color)
+      pr["fmt_baseUri"] = baseUri
+
+      print config.format("templates", "stashPullrequest", pr),"\n"
