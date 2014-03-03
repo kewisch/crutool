@@ -8,6 +8,8 @@ import re
 import sys
 import getpass
 import smtplib
+import tempfile
+import subprocess
 import os
 
 from crutool.displayer import JSONDisplayer
@@ -315,28 +317,34 @@ class CRUTool(object):
       'JIRA_BASE': config.require("defaults", "jira_base")
     }
     msg = JSONDisplayer.pullRequest(data)
-    print "=== BEGIN MESSAGE ==="
-    print msg
-    print "=== END MESSAGE ==="
-    raw_input("Ok? (Ctrl+C to cancel) ")
+    EDITOR = os.environ.get('EDITOR','vim')
+    with tempfile.NamedTemporaryFile(suffix='.tmp') as fp:
+      fp.write(msg)
+      fp.flush()
+      subprocess.call([EDITOR, fp.name])
+      fp.seek(0)
+      msg = fp.read()
 
-    host = config.require("smtp", "host")
-    if config.get("smtp", "ssl") == "True":
-      smtp = smtplib.SMTP_SSL(host)
+    if len(msg.strip()):
+      host = config.require("smtp", "host")
+      if config.get("smtp", "ssl") == "True":
+        smtp = smtplib.SMTP_SSL(host)
+      else:
+        smtp = smtplib.SMTP(host)
+
+      user = config.require("smtp", "username")
+      password = keyring.get_password('crutool-smtp', user)
+      if password is None:
+        password = getpass.getpass("SMTP Password [%s]:" % user)
+        keyring.set_password('crutool-smtp', user, password)
+
+      smtp.login(user, password)
+      smtp.sendmail(config.require("smtp", "from"),
+                    config.require("smtp", "recipients"), msg)
+      smtp.quit()
+      print "Success"
     else:
-      smtp = smtplib.SMTP(host)
-
-    user = config.require("smtp", "username")
-    password = keyring.get_password('crutool-smtp', user)
-    if password is None:
-      password = getpass.getpass("SMTP Password [%s]:" % user)
-      keyring.set_password('crutool-smtp', user, password)
-
-    smtp.login(user, password)
-    smtp.sendmail(config.require("smtp", "from"),
-                  config.require("smtp", "recipients"), msg)
-    smtp.quit()
-    print "Success"
+      print "Canceled"
 
 
   # jira commands
