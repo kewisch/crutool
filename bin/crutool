@@ -10,6 +10,7 @@ import getpass
 import smtplib
 import tempfile
 import subprocess
+import shutil
 import os
 
 from crutool.displayer import JSONDisplayer
@@ -318,12 +319,17 @@ class CRUTool(object):
     }
     msg = JSONDisplayer.pullRequest(data)
     EDITOR = os.environ.get('EDITOR','vim')
-    with tempfile.NamedTemporaryFile(suffix='.tmp') as fp:
-      fp.write(msg)
-      fp.flush()
+
+    msgdir = tempfile.mkdtemp()
+    msgfile = os.path.join(msgdir,"pull request message")
+    try:
+      with open(msgfile, "w") as fp:
+        fp.write(msg)
       subprocess.call([EDITOR, fp.name])
-      fp.seek(0)
-      msg = fp.read()
+      with open(msgfile, "r") as fp:
+        msg = fp.read()
+    finally:
+      shutil.rmtree(msgdir)
 
     if len(msg.strip()):
       host = config.require("smtp", "host")
