@@ -10,6 +10,8 @@ import datetime
 import re
 import string
 
+from .config import config
+
 try:
   import git
   gitSupport = True
@@ -40,17 +42,6 @@ def textOptions(kv):
 
   return opts,", ".join(optprompt)
 
-def dict_merge(a, b):
-    if not isinstance(b, dict):
-        return b
-    for k, v in b.iteritems():
-        if k in a and isinstance(a[k], dict):
-                a[k] = dict_merge(a[k], v)
-        else:
-            a[k] = v
-    return a
-
-
 def isonow(delta=None):
   dtnow = datetime.datetime.now()
   utcnow = datetime.datetime.utcnow()
@@ -71,30 +62,6 @@ def gitroot(path):
     path = os.path.dirname(path)
   return None
 
-def docstring_trim(docstring):
-    if not docstring:
-        return ''
-    # Convert tabs to spaces (following the normal Python rules)
-    # and split into a list of lines:
-    lines = docstring.expandtabs().splitlines()
-    # Determine minimum indentation (first line doesn't count):
-    indent = sys.maxint
-    for line in lines[1:]:
-        stripped = line.lstrip()
-        if stripped:
-            indent = min(indent, len(line) - len(stripped))
-    # Remove indentation (first line is special):
-    trimmed = [lines[0].strip()]
-    if indent < sys.maxint:
-        for line in lines[1:]:
-            trimmed.append(line[indent:].rstrip())
-    # Strip off trailing and leading blank lines:
-    while trimmed and not trimmed[-1]:
-        trimmed.pop()
-    while trimmed and not trimmed[0]:
-        trimmed.pop(0)
-    # Return a single string:
-    return '\n'.join(trimmed)
 
 def isPlaceholder(placeholder):
   return placeholder in ["@","_"]

@@ -6,10 +6,19 @@
 import ast
 import os.path
 from collections import defaultdict
-from .utils import dict_merge
 from .exceptions import ConfigMissingException
 from iniparse import INIConfig
 from string import Formatter
+
+def dict_merge(a, b):
+    if not isinstance(b, dict):
+        return b
+    for k, v in b.iteritems():
+        if k in a and isinstance(a[k], dict):
+                a[k] = dict_merge(a[k], v)
+        else:
+            a[k] = v
+    return a
 
 class CRUToolConfig(object):
   def __init__(self):
