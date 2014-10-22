@@ -186,21 +186,26 @@ class CRUTool(object):
       issueInfo = self.jira.issueInfo(issue)
       name = "%s - %s" % (issue, issueInfo["fields"]["summary"])
 
-    # Finally, create the review
-    review = self.cru.createReview(project, issue, repo, name, csets)
-
-    if review and "permaId" in review and "id" in review["permaId"]:
-      cr = review["permaId"]["id"]
-      htmlLink = "%s/cru/%s" % (config.require("defaults", "cru_base"), cr)
-      print "Created review for %s at %s" % (issue, htmlLink)
-
-      # Set the last issue to this issue for further processing
-      config.set("cache", "lastissue", issue.encode('utf-8'))
-
-      # If the user wants us to transition the issue, do it now
-      self.cru_review_transition_hook(cr, "create", issue)
+    # Make sure at least one of the changesets has been scanned to avoid draft reviews
+    cset = self.cru.commitInfo(repo, csets[0])
+    if cset is None:
+      print "Changeset %s has not been processed by fisheye, please try again later" % (csets[0])
     else:
-      print "An error occurred:",review
+      # Finally, create the review
+      review = self.cru.createReview(project, issue, repo, name, csets)
+
+      if review and "permaId" in review and "id" in review["permaId"]:
+        cr = review["permaId"]["id"]
+        htmlLink = "%s/cru/%s" % (config.require("defaults", "cru_base"), cr)
+        print "Created review for %s at %s" % (issue, htmlLink)
+
+        # Set the last issue to this issue for further processing
+        config.set("cache", "lastissue", issue.encode('utf-8'))
+
+        # If the user wants us to transition the issue, do it now
+        self.cru_review_transition_hook(cr, "create", issue)
+      else:
+        print "An error occurred:",review
 
   def cru_review_transition_hook(self, cr, action, issue=None):
     transition = config.get("review", "%s_jira_transition" % action, None)
@@ -663,8 +668,7 @@ class CRUTool(object):
       # Now call it with the remaining arguments
       func(args[2:])
     except LoginFailedException as e:
-      keyring.delete_password('crutool', jira_user)
-      keyring.delete_password('crutool', cru_user)
+      self.auth_clear([])
       if e.reason == "AUTHENTICATION_DENIED":
         print "Login failed too many times. Please log in once via " + \
               "the web interface and try again"
